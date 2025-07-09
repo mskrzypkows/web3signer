@@ -16,7 +16,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static tech.pegasys.web3signer.core.service.jsonrpc.response.JsonRpcError.INVALID_PARAMS;
 import static tech.pegasys.web3signer.core.service.jsonrpc.response.JsonRpcError.SIGNING_FROM_IS_NOT_AN_UNLOCKED_ACCOUNT;
@@ -27,6 +29,8 @@ import tech.pegasys.web3signer.core.service.jsonrpc.JsonRpcRequest;
 import tech.pegasys.web3signer.core.service.jsonrpc.JsonRpcRequestId;
 import tech.pegasys.web3signer.core.service.jsonrpc.exceptions.JsonRpcException;
 
+import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -104,11 +108,19 @@ public class OPSignerSignBlockPayloadHandlerTest {
   public void testAddressNotAvailable() {
     final String address = "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6";
     final Map<String, Object> blockPayloadArgs = new HashMap<>();
+    // Use the actual format from Go: domain as array, chainId as number,
+    // payloadHash as base64
+    final List<Number> domainArray = new ArrayList<>();
+    for (int i = 0; i < 31; i++) {
+      domainArray.add(0);
+    }
+    domainArray.add(1); // Last byte is 1
+    blockPayloadArgs.put("domain", domainArray);
+    blockPayloadArgs.put("chainId", 10L); // 0xa as number
     blockPayloadArgs.put(
-        "domain", "0x0000000000000000000000000000000000000000000000000000000000000001");
-    blockPayloadArgs.put("chainId", "0xa");
-    blockPayloadArgs.put(
-        "payloadHash", "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef");
+        "payloadHash",
+        "EjRWeJCrze8SNFZ4kKvN7xI0VniQq83vEjRWeJCrze8SNFZ4kKvN7xI0VniQq83v"); // base64 of 32
+    // bytes
     blockPayloadArgs.put("senderAddress", "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6");
 
     final JsonRpcRequest request = new JsonRpcRequest("2.0", "opsigner_signBlockPayload");
@@ -128,8 +140,11 @@ public class OPSignerSignBlockPayloadHandlerTest {
     final String address = "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6";
     final Map<String, Object> blockPayloadArgs = new HashMap<>();
     // Missing required fields
-    blockPayloadArgs.put(
-        "domain", "0x0000000000000000000000000000000000000000000000000000000000000001");
+    final List<Number> domainArray = new ArrayList<>();
+    for (int i = 0; i < 32; i++) {
+      domainArray.add(0);
+    }
+    blockPayloadArgs.put("domain", domainArray);
     // Missing chainId, payloadHash, senderAddress
 
     final JsonRpcRequest request = new JsonRpcRequest("2.0", "opsigner_signBlockPayload");
@@ -148,10 +163,14 @@ public class OPSignerSignBlockPayloadHandlerTest {
   public void testInvalidDomainSize() {
     final String address = "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6";
     final Map<String, Object> blockPayloadArgs = new HashMap<>();
-    blockPayloadArgs.put("domain", "0x1234"); // Too short, should be 32 bytes
-    blockPayloadArgs.put("chainId", "0xa");
+    final List<Number> domainArray = new ArrayList<>();
+    domainArray.add(0x12);
+    domainArray.add(0x34);
+    // Only 2 bytes, should be 32
+    blockPayloadArgs.put("domain", domainArray);
+    blockPayloadArgs.put("chainId", 10L);
     blockPayloadArgs.put(
-        "payloadHash", "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef");
+        "payloadHash", "EjRWeJCrze8SNFZ4kKvN7xI0VniQq83vEjRWeJCrze8SNFZ4kKvN7xI0VniQq83v");
     blockPayloadArgs.put("senderAddress", "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6");
 
     final JsonRpcRequest request = new JsonRpcRequest("2.0", "opsigner_signBlockPayload");
@@ -170,11 +189,16 @@ public class OPSignerSignBlockPayloadHandlerTest {
   public void testChainIdTooLarge() {
     final String address = "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6";
     final Map<String, Object> blockPayloadArgs = new HashMap<>();
+    final List<Number> domainArray = new ArrayList<>();
+    for (int i = 0; i < 32; i++) {
+      domainArray.add(0);
+    }
+    blockPayloadArgs.put("domain", domainArray);
+    // Create a chainId that's too large (more than 256 bits)
+    final BigInteger largeChainId = BigInteger.valueOf(2).pow(257);
+    blockPayloadArgs.put("chainId", largeChainId);
     blockPayloadArgs.put(
-        "domain", "0x0000000000000000000000000000000000000000000000000000000000000001");
-    blockPayloadArgs.put("chainId", "0x" + "1".repeat(65)); // 65 hex chars = 260 bits > 256
-    blockPayloadArgs.put(
-        "payloadHash", "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef");
+        "payloadHash", "EjRWeJCrze8SNFZ4kKvN7xI0VniQq83vEjRWeJCrze8SNFZ4kKvN7xI0VniQq83v");
     blockPayloadArgs.put("senderAddress", "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6");
 
     final JsonRpcRequest request = new JsonRpcRequest("2.0", "opsigner_signBlockPayload");
@@ -187,5 +211,53 @@ public class OPSignerSignBlockPayloadHandlerTest {
     assertThat(thrown).isInstanceOf(JsonRpcException.class);
     final JsonRpcException rpcException = (JsonRpcException) thrown;
     assertThat(rpcException.getJsonRpcError()).isEqualTo(INVALID_PARAMS);
+  }
+
+  @Test
+  void shouldHandleGoCompatibleDataFormat() {
+    // Test with the exact format from Go: domain as array, chainId as number,
+    // payloadHash as base64
+    final String address = "0x614561d2d143621e126e87831aef287678b442b8";
+    final Map<String, Object> blockPayloadArgs = new HashMap<>();
+
+    // domain: [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0]
+    final List<Number> domainArray = new ArrayList<>();
+    for (int i = 0; i < 32; i++) {
+      domainArray.add(0);
+    }
+    blockPayloadArgs.put("domain", domainArray);
+
+    // chainId: 167001
+    blockPayloadArgs.put("chainId", 167001L);
+
+    // payloadHash: "NU63txpobdLMqmU7GmQ1q9u2n/Z4mxKvI93a8sKT23o=" (base64)
+    blockPayloadArgs.put("payloadHash", "NU63txpobdLMqmU7GmQ1q9u2n/Z4mxKvI93a8sKT23o=");
+
+    // senderAddress: "0x614561d2d143621e126e87831aef287678b442b8"
+    blockPayloadArgs.put("senderAddress", "0x614561d2d143621e126e87831aef287678b442b8");
+
+    final List<Object> params = List.of(address, blockPayloadArgs);
+    final JsonRpcRequest request = new JsonRpcRequest("2.0", "opsigner_signBlockPayload");
+    request.setParams(params);
+    request.setId(new JsonRpcRequestId(1L));
+
+    // Mock signer behavior
+    when(secpSigner.isSignerAvailable(anyString())).thenReturn(true);
+    doReturn(
+            Optional.of(
+                "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"))
+        .when(secpSigner)
+        .sign(anyString(), any(Bytes.class));
+
+    // Test the handler
+    final String result = handler.createResponseResult(request);
+    assertThat(result).isNotNull();
+    assertThat(result).startsWith("0x");
+    assertThat(result).hasSize(130); // 64 bytes = 128 hex chars + "0x" prefix
+
+    // Verify the signer was called with the correct parameters
+    // The address in the request is the first parameter, not the senderAddress
+    verify(secpSigner).isSignerAvailable("0x614561d2d143621e126e87831aef287678b442b8");
+    verify(secpSigner).sign(eq("0x614561d2d143621e126e87831aef287678b442b8"), any(Bytes.class));
   }
 }

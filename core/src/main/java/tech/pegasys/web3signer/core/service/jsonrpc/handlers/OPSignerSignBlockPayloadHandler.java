@@ -91,22 +91,22 @@ public class OPSignerSignBlockPayloadHandler implements JsonRpcRequestHandler {
         (java.util.Map<String, Object>) blockPayloadArgsParam;
 
     // Extract parameters from the map
-    final String domainHex = (String) blockPayloadArgs.get("domain");
-    final String chainIdHex = (String) blockPayloadArgs.get("chainId");
-    final String payloadHashHex = (String) blockPayloadArgs.get("payloadHash");
+    final Object domainObj = blockPayloadArgs.get("domain");
+    final Object chainIdObj = blockPayloadArgs.get("chainId");
+    final Object payloadHashObj = blockPayloadArgs.get("payloadHash");
     final String senderAddressHex = (String) blockPayloadArgs.get("senderAddress");
 
-    if (domainHex == null
-        || chainIdHex == null
-        || payloadHashHex == null
+    if (domainObj == null
+        || chainIdObj == null
+        || payloadHashObj == null
         || senderAddressHex == null) {
       throw new JsonRpcException(INVALID_PARAMS);
     }
 
-    // Convert hex strings to bytes and validate
-    final Bytes domain = Bytes.fromHexString(domainHex);
-    final BigInteger chainId = new BigInteger(chainIdHex.substring(2), 16); // Remove "0x" prefix
-    final Bytes payloadHash = Bytes.fromHexString(payloadHashHex);
+    // Convert parameters to the correct format
+    final Bytes domain = parseDomain(domainObj);
+    final BigInteger chainId = parseChainId(chainIdObj);
+    final Bytes payloadHash = parsePayloadHash(payloadHashObj);
     final String senderAddress = normaliseIdentifier(senderAddressHex);
 
     // Validate domain and payloadHash are 32 bytes
@@ -167,6 +167,90 @@ public class OPSignerSignBlockPayloadHandler implements JsonRpcRequestHandler {
         throw new JsonRpcException(INVALID_PARAMS);
       }
       return paramList;
+    } else {
+      throw new JsonRpcException(INVALID_PARAMS);
+    }
+  }
+
+  private Bytes parseDomain(final Object domainObj) {
+    if (domainObj instanceof List<?>) {
+      // Handle array format: [0, 0, 0, ...]
+      final List<?> domainList = (List<?>) domainObj;
+      if (domainList.size() != 32) {
+        throw new JsonRpcException(INVALID_PARAMS);
+      }
+      final byte[] domainBytes = new byte[32];
+      for (int i = 0; i < 32; i++) {
+        final Object element = domainList.get(i);
+        if (element instanceof Number) {
+          domainBytes[i] = ((Number) element).byteValue();
+        } else {
+          throw new JsonRpcException(INVALID_PARAMS);
+        }
+      }
+      return Bytes.wrap(domainBytes);
+    } else if (domainObj instanceof String) {
+      // Handle hex string format: "0x..."
+      final String domainHex = (String) domainObj;
+      if (!domainHex.startsWith("0x")) {
+        throw new JsonRpcException(INVALID_PARAMS);
+      }
+      final Bytes domain = Bytes.fromHexString(domainHex);
+      if (domain.size() != 32) {
+        throw new JsonRpcException(INVALID_PARAMS);
+      }
+      return domain;
+    } else {
+      throw new JsonRpcException(INVALID_PARAMS);
+    }
+  }
+
+  private BigInteger parseChainId(final Object chainIdObj) {
+    if (chainIdObj instanceof Number) {
+      // Handle number format: 167001
+      final BigInteger chainId = BigInteger.valueOf(((Number) chainIdObj).longValue());
+      if (chainId.bitLength() > 256) {
+        throw new JsonRpcException(INVALID_PARAMS);
+      }
+      return chainId;
+    } else if (chainIdObj instanceof String) {
+      // Handle hex string format: "0xa"
+      final String chainIdHex = (String) chainIdObj;
+      if (!chainIdHex.startsWith("0x")) {
+        throw new JsonRpcException(INVALID_PARAMS);
+      }
+      final BigInteger chainId = new BigInteger(chainIdHex.substring(2), 16);
+      if (chainId.bitLength() > 256) {
+        throw new JsonRpcException(INVALID_PARAMS);
+      }
+      return chainId;
+    } else {
+      throw new JsonRpcException(INVALID_PARAMS);
+    }
+  }
+
+  private Bytes parsePayloadHash(final Object payloadHashObj) {
+    if (payloadHashObj instanceof String) {
+      final String payloadHashStr = (String) payloadHashObj;
+      if (payloadHashStr.startsWith("0x")) {
+        // Handle hex string format: "0x..."
+        final Bytes payloadHash = Bytes.fromHexString(payloadHashStr);
+        if (payloadHash.size() != 32) {
+          throw new JsonRpcException(INVALID_PARAMS);
+        }
+        return payloadHash;
+      } else {
+        // Handle base64 format: "NU63txpobdLMqmU7GmQ1q9u2n/Z4mxKvI93a8sKT23o="
+        try {
+          final byte[] payloadHashBytes = java.util.Base64.getDecoder().decode(payloadHashStr);
+          if (payloadHashBytes.length != 32) {
+            throw new JsonRpcException(INVALID_PARAMS);
+          }
+          return Bytes.wrap(payloadHashBytes);
+        } catch (final IllegalArgumentException e) {
+          throw new JsonRpcException(INVALID_PARAMS);
+        }
+      }
     } else {
       throw new JsonRpcException(INVALID_PARAMS);
     }
