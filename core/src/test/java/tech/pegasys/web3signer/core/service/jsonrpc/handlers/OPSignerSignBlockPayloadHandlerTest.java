@@ -59,7 +59,6 @@ public class OPSignerSignBlockPayloadHandlerTest {
   @Test
   public void testValidRequest() {
     // Create test data
-    final String address = "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6";
     final String domain = "0x0000000000000000000000000000000000000000000000000000000000000001";
     final String chainId = "0xa"; // 10 in hex
     final String payloadHash = "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
@@ -75,7 +74,7 @@ public class OPSignerSignBlockPayloadHandlerTest {
     // Create request
     final JsonRpcRequest request = new JsonRpcRequest("2.0", "opsigner_signBlockPayload");
     request.setId(new JsonRpcRequestId(1));
-    request.setParams(List.of(address, blockPayloadArgs));
+    request.setParams(List.of(blockPayloadArgs));
 
     // Mock signer behavior
     when(secpSigner.isSignerAvailable(anyString())).thenReturn(true);
@@ -105,39 +104,7 @@ public class OPSignerSignBlockPayloadHandlerTest {
   }
 
   @Test
-  public void testAddressNotAvailable() {
-    final String address = "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6";
-    final Map<String, Object> blockPayloadArgs = new HashMap<>();
-    // Use the actual format from Go: domain as array, chainId as number,
-    // payloadHash as base64
-    final List<Number> domainArray = new ArrayList<>();
-    for (int i = 0; i < 31; i++) {
-      domainArray.add(0);
-    }
-    domainArray.add(1); // Last byte is 1
-    blockPayloadArgs.put("domain", domainArray);
-    blockPayloadArgs.put("chainId", 10L); // 0xa as number
-    blockPayloadArgs.put(
-        "payloadHash",
-        "EjRWeJCrze8SNFZ4kKvN7xI0VniQq83vEjRWeJCrze8SNFZ4kKvN7xI0VniQq83v"); // base64 of 32
-    // bytes
-    blockPayloadArgs.put("senderAddress", "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6");
-
-    final JsonRpcRequest request = new JsonRpcRequest("2.0", "opsigner_signBlockPayload");
-    request.setId(new JsonRpcRequestId(1));
-    request.setParams(List.of(address, blockPayloadArgs));
-
-    when(secpSigner.isSignerAvailable(anyString())).thenReturn(false);
-
-    final Throwable thrown = catchThrowable(() -> handler.createResponseResult(request));
-    assertThat(thrown).isInstanceOf(JsonRpcException.class);
-    final JsonRpcException rpcException = (JsonRpcException) thrown;
-    assertThat(rpcException.getJsonRpcError()).isEqualTo(SIGNING_FROM_IS_NOT_AN_UNLOCKED_ACCOUNT);
-  }
-
-  @Test
   public void testMissingRequiredFields() {
-    final String address = "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6";
     final Map<String, Object> blockPayloadArgs = new HashMap<>();
     // Missing required fields
     final List<Number> domainArray = new ArrayList<>();
@@ -149,9 +116,7 @@ public class OPSignerSignBlockPayloadHandlerTest {
 
     final JsonRpcRequest request = new JsonRpcRequest("2.0", "opsigner_signBlockPayload");
     request.setId(new JsonRpcRequestId(1));
-    request.setParams(List.of(address, blockPayloadArgs));
-
-    when(secpSigner.isSignerAvailable(anyString())).thenReturn(true);
+    request.setParams(List.of(blockPayloadArgs));
 
     final Throwable thrown = catchThrowable(() -> handler.createResponseResult(request));
     assertThat(thrown).isInstanceOf(JsonRpcException.class);
@@ -161,7 +126,6 @@ public class OPSignerSignBlockPayloadHandlerTest {
 
   @Test
   public void testInvalidDomainSize() {
-    final String address = "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6";
     final Map<String, Object> blockPayloadArgs = new HashMap<>();
     final List<Number> domainArray = new ArrayList<>();
     domainArray.add(0x12);
@@ -175,9 +139,7 @@ public class OPSignerSignBlockPayloadHandlerTest {
 
     final JsonRpcRequest request = new JsonRpcRequest("2.0", "opsigner_signBlockPayload");
     request.setId(new JsonRpcRequestId(1));
-    request.setParams(List.of(address, blockPayloadArgs));
-
-    when(secpSigner.isSignerAvailable(anyString())).thenReturn(true);
+    request.setParams(List.of(blockPayloadArgs));
 
     final Throwable thrown = catchThrowable(() -> handler.createResponseResult(request));
     assertThat(thrown).isInstanceOf(JsonRpcException.class);
@@ -187,7 +149,6 @@ public class OPSignerSignBlockPayloadHandlerTest {
 
   @Test
   public void testChainIdTooLarge() {
-    final String address = "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6";
     final Map<String, Object> blockPayloadArgs = new HashMap<>();
     final List<Number> domainArray = new ArrayList<>();
     for (int i = 0; i < 32; i++) {
@@ -203,9 +164,7 @@ public class OPSignerSignBlockPayloadHandlerTest {
 
     final JsonRpcRequest request = new JsonRpcRequest("2.0", "opsigner_signBlockPayload");
     request.setId(new JsonRpcRequestId(1));
-    request.setParams(List.of(address, blockPayloadArgs));
-
-    when(secpSigner.isSignerAvailable(anyString())).thenReturn(true);
+    request.setParams(List.of(blockPayloadArgs));
 
     final Throwable thrown = catchThrowable(() -> handler.createResponseResult(request));
     assertThat(thrown).isInstanceOf(JsonRpcException.class);
@@ -217,7 +176,6 @@ public class OPSignerSignBlockPayloadHandlerTest {
   void shouldHandleGoCompatibleDataFormat() {
     // Test with the exact format from Go: domain as array, chainId as number,
     // payloadHash as base64
-    final String address = "0x614561d2d143621e126e87831aef287678b442b8";
     final Map<String, Object> blockPayloadArgs = new HashMap<>();
 
     // domain: [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0]
@@ -236,7 +194,7 @@ public class OPSignerSignBlockPayloadHandlerTest {
     // senderAddress: "0x614561d2d143621e126e87831aef287678b442b8"
     blockPayloadArgs.put("senderAddress", "0x614561d2d143621e126e87831aef287678b442b8");
 
-    final List<Object> params = List.of(address, blockPayloadArgs);
+    final List<Object> params = List.of(blockPayloadArgs);
     final JsonRpcRequest request = new JsonRpcRequest("2.0", "opsigner_signBlockPayload");
     request.setParams(params);
     request.setId(new JsonRpcRequestId(1L));

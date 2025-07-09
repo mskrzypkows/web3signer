@@ -70,19 +70,9 @@ public class OPSignerSignBlockPayloadHandler implements JsonRpcRequestHandler {
     final List<?> params = validateAndGetParams(request);
 
     // Parse parameters
-    final Object addressParam = params.get(0);
-    if (!(addressParam instanceof String)) {
-      throw new JsonRpcException(INVALID_PARAMS);
-    }
-    final String normalizedAddress = normaliseIdentifier((String) addressParam);
-
-    if (!secpSigner.isSignerAvailable(normalizedAddress)) {
-      LOG.debug("Address {} not available for signing", normalizedAddress);
-      throw new JsonRpcException(SIGNING_FROM_IS_NOT_AN_UNLOCKED_ACCOUNT);
-    }
-
-    final Object blockPayloadArgsParam = params.get(1);
+    final Object blockPayloadArgsParam = params.get(0);
     if (!(blockPayloadArgsParam instanceof java.util.Map)) {
+      LOG.debug("blockPayloadArgsParam is not a map: {}", blockPayloadArgsParam);
       throw new JsonRpcException(INVALID_PARAMS);
     }
 
@@ -96,10 +86,16 @@ public class OPSignerSignBlockPayloadHandler implements JsonRpcRequestHandler {
     final Object payloadHashObj = blockPayloadArgs.get("payloadHash");
     final String senderAddressHex = (String) blockPayloadArgs.get("senderAddress");
 
+    LOG.debug("domainObj: {}", domainObj);
+    LOG.debug("chainIdObj: {}", chainIdObj);
+    LOG.debug("payloadHashObj: {}", payloadHashObj);
+    LOG.debug("senderAddressHex: {}", senderAddressHex);
+
     if (domainObj == null
         || chainIdObj == null
         || payloadHashObj == null
         || senderAddressHex == null) {
+      LOG.debug("Missing required fields");
       throw new JsonRpcException(INVALID_PARAMS);
     }
 
@@ -109,13 +105,22 @@ public class OPSignerSignBlockPayloadHandler implements JsonRpcRequestHandler {
     final Bytes payloadHash = parsePayloadHash(payloadHashObj);
     final String senderAddress = normaliseIdentifier(senderAddressHex);
 
+    if (!secpSigner.isSignerAvailable(senderAddress)) {
+      LOG.debug("Address {} not available for signing", senderAddress);
+      throw new JsonRpcException(SIGNING_FROM_IS_NOT_AN_UNLOCKED_ACCOUNT);
+    }
+
+
+
     // Validate domain and payloadHash are 32 bytes
     if (domain.size() != 32 || payloadHash.size() != 32) {
+      LOG.debug("domain or payloadHash is not 32 bytes");
       throw new JsonRpcException(INVALID_PARAMS);
     }
 
     // Validate chainId is not too large (256 bits)
     if (chainId.bitLength() > 256) {
+      LOG.debug("chainId is too large");
       throw new JsonRpcException(INVALID_PARAMS);
     }
 
@@ -143,6 +148,7 @@ public class OPSignerSignBlockPayloadHandler implements JsonRpcRequestHandler {
     // chain_id: second 32 bytes (big-endian, padded to 32 bytes)
     final byte[] chainIdBytes = chainId.toByteArray();
     if (chainIdBytes.length > 32) {
+      LOG.debug("chainId is too large");
       throw new JsonRpcException(INVALID_PARAMS);
     }
     // Copy chainId bytes to the end of the 32-byte section (big-endian)
@@ -159,15 +165,18 @@ public class OPSignerSignBlockPayloadHandler implements JsonRpcRequestHandler {
   private List<?> validateAndGetParams(final JsonRpcRequest request) {
     final Object params = request.getParams();
     if (params == null) {
+      LOG.debug("params is null");
       throw new JsonRpcException(INVALID_PARAMS);
     }
-    // param 1: account address, param 2: BlockPayloadArgs object
+    // params list with BlockPayloadArgs object
     if (params instanceof List<?> paramList) {
-      if (paramList.size() != 2) {
+      if (paramList.size() != 1) {
+        LOG.debug("paramList size is not 1");
         throw new JsonRpcException(INVALID_PARAMS);
       }
       return paramList;
     } else {
+      LOG.debug("params is not a list: {}", params);
       throw new JsonRpcException(INVALID_PARAMS);
     }
   }
@@ -177,6 +186,7 @@ public class OPSignerSignBlockPayloadHandler implements JsonRpcRequestHandler {
       // Handle array format: [0, 0, 0, ...]
       final List<?> domainList = (List<?>) domainObj;
       if (domainList.size() != 32) {
+        LOG.debug("domainList size is not 32");
         throw new JsonRpcException(INVALID_PARAMS);
       }
       final byte[] domainBytes = new byte[32];
@@ -185,6 +195,7 @@ public class OPSignerSignBlockPayloadHandler implements JsonRpcRequestHandler {
         if (element instanceof Number) {
           domainBytes[i] = ((Number) element).byteValue();
         } else {
+          LOG.debug("domainList element is not a number: {}", element);
           throw new JsonRpcException(INVALID_PARAMS);
         }
       }
@@ -193,14 +204,17 @@ public class OPSignerSignBlockPayloadHandler implements JsonRpcRequestHandler {
       // Handle hex string format: "0x..."
       final String domainHex = (String) domainObj;
       if (!domainHex.startsWith("0x")) {
+        LOG.debug("domainHex does not start with 0x");
         throw new JsonRpcException(INVALID_PARAMS);
       }
       final Bytes domain = Bytes.fromHexString(domainHex);
       if (domain.size() != 32) {
+        LOG.debug("domain is not 32 bytes");
         throw new JsonRpcException(INVALID_PARAMS);
       }
       return domain;
     } else {
+      LOG.debug("domainObj is not a list or string: {}", domainObj);
       throw new JsonRpcException(INVALID_PARAMS);
     }
   }
@@ -210,6 +224,7 @@ public class OPSignerSignBlockPayloadHandler implements JsonRpcRequestHandler {
       // Handle number format: 167001
       final BigInteger chainId = BigInteger.valueOf(((Number) chainIdObj).longValue());
       if (chainId.bitLength() > 256) {
+        LOG.debug("chainId is too large");
         throw new JsonRpcException(INVALID_PARAMS);
       }
       return chainId;
@@ -217,14 +232,17 @@ public class OPSignerSignBlockPayloadHandler implements JsonRpcRequestHandler {
       // Handle hex string format: "0xa"
       final String chainIdHex = (String) chainIdObj;
       if (!chainIdHex.startsWith("0x")) {
+        LOG.debug("chainIdHex does not start with 0x");
         throw new JsonRpcException(INVALID_PARAMS);
       }
       final BigInteger chainId = new BigInteger(chainIdHex.substring(2), 16);
       if (chainId.bitLength() > 256) {
+        LOG.debug("chainId is too large");
         throw new JsonRpcException(INVALID_PARAMS);
       }
       return chainId;
     } else {
+      LOG.debug("chainIdObj is not a number or string: {}", chainIdObj);
       throw new JsonRpcException(INVALID_PARAMS);
     }
   }
@@ -236,6 +254,7 @@ public class OPSignerSignBlockPayloadHandler implements JsonRpcRequestHandler {
         // Handle hex string format: "0x..."
         final Bytes payloadHash = Bytes.fromHexString(payloadHashStr);
         if (payloadHash.size() != 32) {
+          LOG.debug("payloadHash is not 32 bytes");
           throw new JsonRpcException(INVALID_PARAMS);
         }
         return payloadHash;
@@ -244,14 +263,17 @@ public class OPSignerSignBlockPayloadHandler implements JsonRpcRequestHandler {
         try {
           final byte[] payloadHashBytes = java.util.Base64.getDecoder().decode(payloadHashStr);
           if (payloadHashBytes.length != 32) {
+            LOG.debug("payloadHashBytes is not 32 bytes");
             throw new JsonRpcException(INVALID_PARAMS);
           }
           return Bytes.wrap(payloadHashBytes);
         } catch (final IllegalArgumentException e) {
+          LOG.debug("payloadHashStr is not a valid base64 string");
           throw new JsonRpcException(INVALID_PARAMS);
         }
       }
     } else {
+      LOG.debug("payloadHashObj is not a string: {}", payloadHashObj);
       throw new JsonRpcException(INVALID_PARAMS);
     }
   }
