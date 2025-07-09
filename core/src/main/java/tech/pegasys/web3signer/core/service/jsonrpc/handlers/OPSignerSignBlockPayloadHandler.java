@@ -1,0 +1,174 @@
+/*
+ * Copyright 2019 ConsenSys AG.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+ * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+ * specific language governing permissions and limitations under the License.
+ */
+package tech.pegasys.web3signer.core.service.jsonrpc.handlers;
+
+import static tech.pegasys.web3signer.core.service.jsonrpc.response.JsonRpcError.INVALID_PARAMS;
+import static tech.pegasys.web3signer.core.service.jsonrpc.response.JsonRpcError.SIGNING_FROM_IS_NOT_AN_UNLOCKED_ACCOUNT;
+import static tech.pegasys.web3signer.signing.util.IdentifierUtils.normaliseIdentifier;
+
+import tech.pegasys.web3signer.core.service.http.handlers.signing.SignerForIdentifier;
+import tech.pegasys.web3signer.core.service.jsonrpc.JsonDecoder;
+import tech.pegasys.web3signer.core.service.jsonrpc.JsonRpcRequest;
+import tech.pegasys.web3signer.core.service.jsonrpc.JsonRpcRequestHandler;
+import tech.pegasys.web3signer.core.service.jsonrpc.exceptions.JsonRpcException;
+import tech.pegasys.web3signer.core.service.jsonrpc.response.JsonRpcErrorResponse;
+import tech.pegasys.web3signer.core.service.jsonrpc.response.JsonRpcSuccessResponse;
+
+import java.math.BigInteger;
+import java.util.List;
+
+import io.vertx.core.json.Json;
+import io.vertx.ext.web.RoutingContext;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.apache.tuweni.bytes.Bytes;
+import org.apache.tuweni.bytes.MutableBytes;
+import org.web3j.crypto.Hash;
+
+public class OPSignerSignBlockPayloadHandler implements JsonRpcRequestHandler {
+
+  private static final Logger LOG = LogManager.getLogger();
+  private final SignerForIdentifier secpSigner;
+
+  public OPSignerSignBlockPayloadHandler(
+      final JsonDecoder jsonDecoder, final SignerForIdentifier secpSigner) {
+    this.secpSigner = secpSigner;
+  }
+
+  @Override
+  public void handle(final RoutingContext context, final JsonRpcRequest request) {
+    LOG.debug("Processing opsigner_signBlockPayload request {}", request.getId());
+
+    try {
+      final String signature = createResponseResult(request);
+      final JsonRpcSuccessResponse response =
+          new JsonRpcSuccessResponse(request.getId(), signature);
+      context.response().end(Json.encodeToBuffer(response));
+    } catch (final JsonRpcException e) {
+      final JsonRpcErrorResponse errorResponse =
+          new JsonRpcErrorResponse(request.getId(), e.getJsonRpcError());
+      context.response().end(Json.encodeToBuffer(errorResponse));
+    } catch (final Exception e) {
+      LOG.error("Unexpected error processing opsigner_signBlockPayload request", e);
+      final JsonRpcErrorResponse errorResponse =
+          new JsonRpcErrorResponse(request.getId(), INVALID_PARAMS);
+      context.response().end(Json.encodeToBuffer(errorResponse));
+    }
+  }
+
+  String createResponseResult(final JsonRpcRequest request) {
+    final List<?> params = validateAndGetParams(request);
+
+    // Parse parameters
+    final Object addressParam = params.get(0);
+    if (!(addressParam instanceof String)) {
+      throw new JsonRpcException(INVALID_PARAMS);
+    }
+    final String normalizedAddress = normaliseIdentifier((String) addressParam);
+
+    if (!secpSigner.isSignerAvailable(normalizedAddress)) {
+      LOG.debug("Address {} not available for signing", normalizedAddress);
+      throw new JsonRpcException(SIGNING_FROM_IS_NOT_AN_UNLOCKED_ACCOUNT);
+    }
+
+    final Object blockPayloadArgsParam = params.get(1);
+    if (!(blockPayloadArgsParam instanceof java.util.Map)) {
+      throw new JsonRpcException(INVALID_PARAMS);
+    }
+
+    @SuppressWarnings("unchecked")
+    final java.util.Map<String, Object> blockPayloadArgs =
+        (java.util.Map<String, Object>) blockPayloadArgsParam;
+
+    // Extract parameters from the map
+    final String domainHex = (String) blockPayloadArgs.get("domain");
+    final String chainIdHex = (String) blockPayloadArgs.get("chainId");
+    final String payloadHashHex = (String) blockPayloadArgs.get("payloadHash");
+    final String senderAddressHex = (String) blockPayloadArgs.get("senderAddress");
+
+    if (domainHex == null
+        || chainIdHex == null
+        || payloadHashHex == null
+        || senderAddressHex == null) {
+      throw new JsonRpcException(INVALID_PARAMS);
+    }
+
+    // Convert hex strings to bytes and validate
+    final Bytes domain = Bytes.fromHexString(domainHex);
+    final BigInteger chainId = new BigInteger(chainIdHex.substring(2), 16); // Remove "0x" prefix
+    final Bytes payloadHash = Bytes.fromHexString(payloadHashHex);
+    final String senderAddress = normaliseIdentifier(senderAddressHex);
+
+    // Validate domain and payloadHash are 32 bytes
+    if (domain.size() != 32 || payloadHash.size() != 32) {
+      throw new JsonRpcException(INVALID_PARAMS);
+    }
+
+    // Validate chainId is not too large (256 bits)
+    if (chainId.bitLength() > 256) {
+      throw new JsonRpcException(INVALID_PARAMS);
+    }
+
+    // Create signing hash according to Go implementation
+    final Bytes signingHash = createSigningHash(domain, chainId, payloadHash);
+
+    // Sign the hash
+    return secpSigner
+        .sign(senderAddress, signingHash)
+        .orElseThrow(
+            () -> {
+              LOG.debug("Unexpected failure signing for {}", senderAddress);
+              return new JsonRpcException(SIGNING_FROM_IS_NOT_AN_UNLOCKED_ACCOUNT);
+            });
+  }
+
+  private Bytes createSigningHash(
+      final Bytes domain, final BigInteger chainId, final Bytes payloadHash) {
+    // Create message input: [32 + 32 + 32] bytes
+    final MutableBytes msgInput = MutableBytes.create(96);
+
+    // domain: first 32 bytes
+    domain.copyTo(msgInput, 0);
+
+    // chain_id: second 32 bytes (big-endian, padded to 32 bytes)
+    final byte[] chainIdBytes = chainId.toByteArray();
+    if (chainIdBytes.length > 32) {
+      throw new JsonRpcException(INVALID_PARAMS);
+    }
+    // Copy chainId bytes to the end of the 32-byte section (big-endian)
+    System.arraycopy(
+        chainIdBytes, 0, msgInput.toArrayUnsafe(), 64 - chainIdBytes.length, chainIdBytes.length);
+
+    // payload_hash: third 32 bytes
+    payloadHash.copyTo(msgInput, 64);
+
+    // Return Keccak256 hash of the message input
+    return Bytes.wrap(Hash.sha3(msgInput.toArrayUnsafe()));
+  }
+
+  private List<?> validateAndGetParams(final JsonRpcRequest request) {
+    final Object params = request.getParams();
+    if (params == null) {
+      throw new JsonRpcException(INVALID_PARAMS);
+    }
+    // param 1: account address, param 2: BlockPayloadArgs object
+    if (params instanceof List<?> paramList) {
+      if (paramList.size() != 2) {
+        throw new JsonRpcException(INVALID_PARAMS);
+      }
+      return paramList;
+    } else {
+      throw new JsonRpcException(INVALID_PARAMS);
+    }
+  }
+}

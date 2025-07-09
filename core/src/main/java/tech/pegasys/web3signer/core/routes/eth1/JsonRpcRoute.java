@@ -27,6 +27,7 @@ import tech.pegasys.web3signer.core.service.jsonrpc.handlers.Eth1AccountsHandler
 import tech.pegasys.web3signer.core.service.jsonrpc.handlers.HttpResponseFactory;
 import tech.pegasys.web3signer.core.service.jsonrpc.handlers.JsonRpcErrorHandler;
 import tech.pegasys.web3signer.core.service.jsonrpc.handlers.JsonRpcHandler;
+import tech.pegasys.web3signer.core.service.jsonrpc.handlers.OPSignerSignBlockPayloadHandler;
 import tech.pegasys.web3signer.core.service.jsonrpc.handlers.PassThroughHandler;
 import tech.pegasys.web3signer.core.service.jsonrpc.handlers.RequestMapper;
 import tech.pegasys.web3signer.core.service.jsonrpc.handlers.internalresponse.EthSignResultProvider;
@@ -57,7 +58,8 @@ public class JsonRpcRoute implements Web3SignerRoute {
   public JsonRpcRoute(final Context context, final Eth1Config eth1Config) {
     this.context = context;
 
-    // we need signerProvider which is an instance of SecpArtifactSignerProviderAdapter which uses
+    // we need signerProvider which is an instance of
+    // SecpArtifactSignerProviderAdapter which uses
     // eth1 address as identifier
     final ArtifactSignerProvider signerProvider =
         context.getArtifactSignerProviders().stream()
@@ -68,7 +70,8 @@ public class JsonRpcRoute implements Web3SignerRoute {
                     new IllegalStateException(
                         "No SecpArtifactSignerProviderAdapter found in Context for eth1 mode"));
 
-    // use same instance of downstreamHttpClient and path calculator for all requests
+    // use same instance of downstreamHttpClient and path calculator for all
+    // requests
     final HttpClient downstreamHttpClient =
         createDownstreamHttpClient(eth1Config, context.getVertx());
     final DownstreamPathCalculator downstreamPathCalculator =
@@ -126,7 +129,6 @@ public class JsonRpcRoute implements Web3SignerRoute {
         new TransactionFactory(chainId, JSON_DECODER, transmitterFactory);
     final SendTransactionHandler sendTransactionHandler =
         new SendTransactionHandler(chainId, transactionFactory, transmitterFactory, secpSigner);
-
     final RequestMapper requestMapper = new RequestMapper(defaultHandler);
     requestMapper.addHandler(
         "eth_accounts",
@@ -148,6 +150,8 @@ public class JsonRpcRoute implements Web3SignerRoute {
             new EthSignTransactionResultProvider(chainId, secpSigner, JSON_DECODER)));
     requestMapper.addHandler("eth_sendTransaction", sendTransactionHandler);
     requestMapper.addHandler("eea_sendTransaction", sendTransactionHandler);
+    requestMapper.addHandler(
+        "opsigner_signBlockPayload", new OPSignerSignBlockPayloadHandler(JSON_DECODER, secpSigner));
 
     return requestMapper;
   }
