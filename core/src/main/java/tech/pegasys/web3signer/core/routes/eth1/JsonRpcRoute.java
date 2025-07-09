@@ -33,6 +33,7 @@ import tech.pegasys.web3signer.core.service.jsonrpc.handlers.RequestMapper;
 import tech.pegasys.web3signer.core.service.jsonrpc.handlers.internalresponse.EthSignResultProvider;
 import tech.pegasys.web3signer.core.service.jsonrpc.handlers.internalresponse.EthSignTransactionResultProvider;
 import tech.pegasys.web3signer.core.service.jsonrpc.handlers.internalresponse.EthSignTypedDataResultProvider;
+import tech.pegasys.web3signer.core.service.jsonrpc.handlers.internalresponse.HealthStatusResultProvider;
 import tech.pegasys.web3signer.core.service.jsonrpc.handlers.internalresponse.InternalResponseHandler;
 import tech.pegasys.web3signer.core.service.jsonrpc.handlers.sendtransaction.SendTransactionHandler;
 import tech.pegasys.web3signer.core.service.jsonrpc.handlers.sendtransaction.transaction.TransactionFactory;
@@ -152,6 +153,9 @@ public class JsonRpcRoute implements Web3SignerRoute {
     requestMapper.addHandler("eea_sendTransaction", sendTransactionHandler);
     requestMapper.addHandler(
         "opsigner_signBlockPayload", new OPSignerSignBlockPayloadHandler(JSON_DECODER, secpSigner));
+    requestMapper.addHandler(
+        "health_status",
+        new InternalResponseHandler<>(HTTP_RESPONSE_FACTORY, new HealthStatusResultProvider()));
 
     return requestMapper;
   }
