@@ -85,6 +85,7 @@ public class Eth1SignatureUtil {
     }
 
     final int headerByte = recId + 27;
+    LOG.debug("recId increased by 27: {}", recId);
     return new Signature(
         BigInteger.valueOf(headerByte), canonicalSignature.r, canonicalSignature.s);
   }

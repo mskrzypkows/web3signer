@@ -16,11 +16,14 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 import java.util.Locale;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.tuweni.bytes.Bytes;
 
 // adapted from
 // https://github.com/web3j/web3j/blob/7054ab324cab0d44a759780e61ee12978fd17490/crypto/src/main/java/org/web3j/crypto/Sign.java#L59
 public class EthMessageUtil {
+  private static final Logger LOG = LogManager.getLogger();
   private static final String MESSAGE_PREFIX = "\u0019Ethereum Signed Message:\n";
 
   /**
@@ -31,6 +34,7 @@ public class EthMessageUtil {
    * @return Bytes wrapping byte[] of ethereum formatted message ready to be signed
    */
   public static Bytes getEthereumMessage(final String message) {
+    LOG.debug("Getting Ethereum message for: {}", message);
     final Bytes messageBytes = hexToBytes(message);
     final Bytes prefix = getEthereumMessagePrefix(messageBytes.size());
 
@@ -38,6 +42,7 @@ public class EthMessageUtil {
   }
 
   private static Bytes getEthereumMessagePrefix(final int messageLength) {
+    LOG.debug("Getting Ethereum message prefix for: {}", messageLength);
     return Bytes.of(MESSAGE_PREFIX.concat(String.valueOf(messageLength)).getBytes(UTF_8));
   }
 

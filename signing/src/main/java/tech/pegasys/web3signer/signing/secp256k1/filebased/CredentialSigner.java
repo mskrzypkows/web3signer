@@ -19,12 +19,14 @@ import tech.pegasys.web3signer.signing.secp256k1.Signer;
 import java.math.BigInteger;
 import java.security.interfaces.ECPublicKey;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.web3j.crypto.Credentials;
 import org.web3j.crypto.Sign;
 import org.web3j.crypto.Sign.SignatureData;
 
 public class CredentialSigner implements Signer {
-
+  private static final Logger LOG = LogManager.getLogger();
   private final Credentials credentials;
   private final ECPublicKey publicKey;
   private final boolean needToHash;
@@ -42,6 +44,7 @@ public class CredentialSigner implements Signer {
 
   @Override
   public Signature sign(final byte[] data) {
+    LOG.debug("Signing data with CredentialSigner data length: {}", data.length);
     final SignatureData signature = Sign.signMessage(data, credentials.getEcKeyPair(), needToHash);
     return new Signature(
         new BigInteger(signature.getV()),

@@ -33,7 +33,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.tuweni.bytes.Bytes;
 import org.apache.tuweni.bytes.MutableBytes;
-import org.web3j.crypto.Hash;
 
 public class OPSignerSignBlockPayloadHandler implements JsonRpcRequestHandler {
 
@@ -110,34 +109,31 @@ public class OPSignerSignBlockPayloadHandler implements JsonRpcRequestHandler {
       throw new JsonRpcException(SIGNING_FROM_IS_NOT_AN_UNLOCKED_ACCOUNT);
     }
 
-
-
-    // Validate domain and payloadHash are 32 bytes
-    if (domain.size() != 32 || payloadHash.size() != 32) {
-      LOG.debug("domain or payloadHash is not 32 bytes");
-      throw new JsonRpcException(INVALID_PARAMS);
-    }
-
-    // Validate chainId is not too large (256 bits)
-    if (chainId.bitLength() > 256) {
-      LOG.debug("chainId is too large");
-      throw new JsonRpcException(INVALID_PARAMS);
-    }
-
     // Create signing hash according to Go implementation
-    final Bytes signingHash = createSigningHash(domain, chainId, payloadHash);
+    final Bytes messageToSign = createMessageToSign(domain, chainId, payloadHash);
 
     // Sign the hash
-    return secpSigner
-        .sign(senderAddress, signingHash)
-        .orElseThrow(
-            () -> {
-              LOG.debug("Unexpected failure signing for {}", senderAddress);
-              return new JsonRpcException(SIGNING_FROM_IS_NOT_AN_UNLOCKED_ACCOUNT);
-            });
+    final String result =
+        secpSigner
+            .sign(senderAddress, messageToSign)
+            .orElseThrow(
+                () -> {
+                  LOG.debug("Unexpected failure signing for {}", senderAddress);
+                  return new JsonRpcException(SIGNING_FROM_IS_NOT_AN_UNLOCKED_ACCOUNT);
+                });
+
+    // Sign.signedMessageToKey(messageToSign, )
+    // Signature signature = new Signature(new BigInteger(result, 16));
+    LOG.debug("result: {}", result);
+    byte[] resultBytes = org.apache.tuweni.bytes.Bytes.fromHexString(result).toArray();
+    resultBytes[64] -= 27;
+    final String result2 = org.apache.tuweni.bytes.Bytes.wrap(resultBytes).toHexString();
+
+    LOG.debug("result2: {}", result2);
+    return result2;
   }
 
-  private Bytes createSigningHash(
+  private Bytes createMessageToSign(
       final Bytes domain, final BigInteger chainId, final Bytes payloadHash) {
     // Create message input: [32 + 32 + 32] bytes
     final MutableBytes msgInput = MutableBytes.create(96);
@@ -152,14 +148,12 @@ public class OPSignerSignBlockPayloadHandler implements JsonRpcRequestHandler {
       throw new JsonRpcException(INVALID_PARAMS);
     }
     // Copy chainId bytes to the end of the 32-byte section (big-endian)
-    System.arraycopy(
-        chainIdBytes, 0, msgInput.toArrayUnsafe(), 64 - chainIdBytes.length, chainIdBytes.length);
+    System.arraycopy(chainIdBytes, 0, msgInput.toArrayUnsafe(), 32, chainIdBytes.length);
 
     // payload_hash: third 32 bytes
     payloadHash.copyTo(msgInput, 64);
 
-    // Return Keccak256 hash of the message input
-    return Bytes.wrap(Hash.sha3(msgInput.toArrayUnsafe()));
+    return Bytes.wrap(msgInput.toArrayUnsafe());
   }
 
   private List<?> validateAndGetParams(final JsonRpcRequest request) {

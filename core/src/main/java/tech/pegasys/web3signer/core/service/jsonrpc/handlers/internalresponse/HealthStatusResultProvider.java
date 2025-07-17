@@ -16,10 +16,16 @@ import tech.pegasys.web3signer.common.ApplicationInfo;
 import tech.pegasys.web3signer.core.service.jsonrpc.JsonRpcRequest;
 import tech.pegasys.web3signer.core.service.jsonrpc.handlers.ResultProvider;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 public class HealthStatusResultProvider implements ResultProvider<String> {
+
+  private static final Logger LOG = LogManager.getLogger();
 
   @Override
   public String createResponseResult(final JsonRpcRequest request) {
+    LOG.info("Health status requested");
     return ApplicationInfo.version();
   }
 }
