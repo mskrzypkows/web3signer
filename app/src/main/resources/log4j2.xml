@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Configuration level="INFO">
   <Properties>
-    <Property name="root.log.level">INFO</Property>
+    <Property name="root.log.level">DEBUG</Property>
     <Property name="dependency.log.level">INFO</Property>
   </Properties>
 
